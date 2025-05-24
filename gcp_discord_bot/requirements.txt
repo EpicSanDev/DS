@@ -1,0 +1,8 @@
+discord.py>=2.0.0
+google-cloud-compute>=1.0.0
+google-auth>=2.0.0
+configparser
+python-dotenv
+python-dateutil
+pteropy>=0.2.0
+# Ajoutez d'autres dépendances si identifiées comme cruciales dès maintenant
