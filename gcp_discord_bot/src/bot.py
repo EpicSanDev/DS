@@ -33,10 +33,15 @@ bot = commands.Bot(command_prefix=BOT_PREFIX, intents=intents)
 
 @bot.event
 async def on_ready():
-    logger.info(f'Bot connecté en tant que {bot.user.name}')
-    logger.info(f'ID du bot: {bot.user.id}')
+    logger.info(f'Application Discord connectée en tant que {bot.user.name}')
+    logger.info(f'ID de l application: {bot.user.id}')
     # Charger les cogs ici
     await load_cogs()
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"Nombre de commandes d'application synchronisées : {len(synced)}")
+    except Exception as e:
+        logger.error(f"Erreur lors de la synchronisation des commandes d'application: {e}")
 
 async def load_cogs():
     cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")

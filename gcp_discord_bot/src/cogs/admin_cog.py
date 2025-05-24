@@ -57,8 +57,61 @@ class AdminCog(commands.Cog):
                 await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
 
 
+# Check personnalisé pour propriétaire
+def is_bot_owner():
+    async def predicate(interaction: Interaction) -> bool:
+        if interaction.user.id not in interaction.client.owner_ids:
+            # logger.warning(f"Utilisateur non propriétaire {interaction.user.name} (ID: {interaction.user.id}) a tenté d'utiliser une commande propriétaire.")
+            # await interaction.response.send_message("Désolé, cette commande est réservée au propriétaire du bot.", ephemeral=True)
+            # Il est préférable de lever NotOwner pour que le gestionnaire d'erreur global le prenne en charge.
+            raise app_commands.NotOwner()
+        return True
+    return app_commands.check(predicate)
+
+class AdminCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        # Récupérer les owner_ids depuis la config du bot si ce n'est pas déjà fait par le bot lui-même
+        # Normalement, bot.owner_id ou bot.owner_ids est défini par commands.Bot
+        if not bot.owner_ids:
+            from src.core import settings # Importer tardivement pour éviter les problèmes d'initialisation circulaire
+            owner_ids_config = settings.get_owner_ids()
+            if owner_ids_config:
+                bot.owner_ids = set(owner_ids_config) # Assurez-vous que c'est un set d'entiers
+        logger.info("Cog Admin chargé.")
+
+    @commands.command(name='ping', help='Vérifie la latence du bot (commande préfixée).')
+    @commands.is_owner() 
+    async def ping(self, ctx: commands.Context):
+        latency = self.bot.latency * 1000 # en ms
+        await ctx.send(f'Pong! Latence (préfixée): {latency:.2f}ms')
+
+    @app_commands.command(name="admin_test", description="Commande de test admin (slash) avec rate limiting.")
+    @app_commands.check(global_app_command_rate_limit_check)
+    # @app_commands.checks.is_owner() # Example: if you want owner only for this too
+    async def admin_test_slash(self, interaction: Interaction):
+        """Un simple slash command de test pour l'admin avec rate limiting."""
+        latency = self.bot.latency * 1000 # en ms
+        await interaction.response.send_message(f'Pong! Latence (slash): {latency:.2f}ms. Commande admin_test exécutée.', ephemeral=True)
+
+    @admin_test_slash.error
+    async def on_admin_test_slash_error(self, interaction: Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.CheckFailure):
+            # The rate limit message is already sent by check_app_command_rate_limit if interaction not responded
+            # So, we might not need to send another message here if it's specifically our rate limit check.
+            # However, if the check_app_command_rate_limit failed to send (e.g. interaction already responded),
+            # or if it's another check failure, this is a fallback.
+            logger.warning(f"CheckFailure pour /admin_test par {interaction.user.name}: {error}")
+            if not interaction.response.is_done():
+                 await interaction.response.send_message("Une condition pour exécuter cette commande n'est pas remplie (ex: rate limit).", ephemeral=True)
+        else:
+            logger.error(f"Erreur inattendue pour /admin_test par {interaction.user.name}: {error}", exc_info=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
+
+
     @app_commands.command(name="load_cog", description="Charge une extension (cog). (Propriétaire uniquement)")
-    @app_commands.is_owner() # Correction ici
+    @is_bot_owner() # Utilisation du check personnalisé
     @app_commands.describe(cog_name="Le nom de l'extension à charger (ex: src.cogs.admin_cog).")
     async def load_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -77,7 +130,7 @@ class AdminCog(commands.Cog):
             await interaction.followup.send(f"Erreur lors du chargement de `{cog_name}`: ```{e}```", ephemeral=True)
 
     @app_commands.command(name="unload_cog", description="Décharge une extension (cog). (Propriétaire uniquement)")
-    @app_commands.is_owner() # Correction ici
+    @is_bot_owner() # Utilisation du check personnalisé
     @app_commands.describe(cog_name="Le nom de l'extension à décharger (ex: src.cogs.admin_cog).")
     async def unload_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -93,7 +146,7 @@ class AdminCog(commands.Cog):
             await interaction.followup.send(f"Erreur lors du déchargement de `{cog_name}`: ```{e}```", ephemeral=True)
 
     @app_commands.command(name="reload_cog", description="Recharge une extension (cog). (Propriétaire uniquement)")
-    @app_commands.is_owner() # Correction ici
+    @is_bot_owner() # Utilisation du check personnalisé
     @app_commands.describe(cog_name="Le nom de l'extension à recharger (ex: src.cogs.admin_cog).")
     async def reload_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
