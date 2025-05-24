@@ -21,63 +21,54 @@ async def global_app_command_rate_limit_check(interaction: Interaction) -> bool:
     # Now call the check method from DBCog instance
     return await db_cog.check_app_command_rate_limit(interaction)
 
-
-class AdminCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-        logger.info("Cog Admin chargé.")
-
-    @commands.command(name='ping', help='Vérifie la latence du bot (commande préfixée).')
-    @commands.is_owner() 
-    async def ping(self, ctx: commands.Context):
-        latency = self.bot.latency * 1000 # en ms
-        await ctx.send(f'Pong! Latence (préfixée): {latency:.2f}ms')
-
-    @app_commands.command(name="admin_test", description="Commande de test admin (slash) avec rate limiting.")
-    @app_commands.check(global_app_command_rate_limit_check)
-    # @app_commands.checks.is_owner() # Example: if you want owner only for this too
-    async def admin_test_slash(self, interaction: Interaction):
-        """Un simple slash command de test pour l'admin avec rate limiting."""
-        latency = self.bot.latency * 1000 # en ms
-        await interaction.response.send_message(f'Pong! Latence (slash): {latency:.2f}ms. Commande admin_test exécutée.', ephemeral=True)
-
-    @admin_test_slash.error
-    async def on_admin_test_slash_error(self, interaction: Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.CheckFailure):
-            # The rate limit message is already sent by check_app_command_rate_limit if interaction not responded
-            # So, we might not need to send another message here if it's specifically our rate limit check.
-            # However, if the check_app_command_rate_limit failed to send (e.g. interaction already responded),
-            # or if it's another check failure, this is a fallback.
-            logger.warning(f"CheckFailure pour /admin_test par {interaction.user.name}: {error}")
-            if not interaction.response.is_done():
-                 await interaction.response.send_message("Une condition pour exécuter cette commande n'est pas remplie (ex: rate limit).", ephemeral=True)
-        else:
-            logger.error(f"Erreur inattendue pour /admin_test par {interaction.user.name}: {error}", exc_info=True)
-            if not interaction.response.is_done():
-                await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
-
-
 # Check personnalisé pour propriétaire
 def is_bot_owner():
     async def predicate(interaction: Interaction) -> bool:
+        # Assurez-vous que bot.owner_ids est peuplé.
+        # commands.Bot popule bot.owner_id et bot.owner_ids à partir de l'application lors de l'initialisation.
+        
+        if not interaction.client.owner_ids:
+            logger.warning("owner_ids n'est pas défini sur le bot. Tentative de chargement depuis src.core.settings.")
+            try:
+                from src.core import settings
+                owner_ids_config = settings.get_owner_ids()
+                if owner_ids_config:
+                    interaction.client.owner_ids = set(owner_ids_config)
+                    logger.info(f"owner_ids chargés depuis settings: {interaction.client.owner_ids}")
+                else:
+                    logger.error("La configuration des propriétaires (owner_ids) est manquante dans src.core.settings.")
+                    raise app_commands.CheckFailure("La configuration des propriétaires du bot est manquante.")
+            except ImportError:
+                logger.error("Impossible d'importer src.core.settings pour charger les owner_ids.")
+                raise app_commands.CheckFailure("Erreur interne lors de la vérification des permissions (ImportError).")
+            except Exception as e:
+                logger.error(f"Erreur inattendue lors du chargement des owner_ids: {e}", exc_info=True)
+                raise app_commands.CheckFailure(f"Erreur interne lors de la vérification des permissions (Exception: {type(e).__name__}).")
+
+
         if interaction.user.id not in interaction.client.owner_ids:
-            # logger.warning(f"Utilisateur non propriétaire {interaction.user.name} (ID: {interaction.user.id}) a tenté d'utiliser une commande propriétaire.")
-            # await interaction.response.send_message("Désolé, cette commande est réservée au propriétaire du bot.", ephemeral=True)
-            # Il est préférable de lever NotOwner pour que le gestionnaire d'erreur global le prenne en charge.
-            raise app_commands.NotOwner()
+            logger.warning(f"Utilisateur non propriétaire {interaction.user.name} (ID: {interaction.user.id}) a tenté d'utiliser une commande propriétaire. IDs propriétaires connus: {interaction.client.owner_ids}")
+            raise app_commands.NotOwner() 
         return True
     return app_commands.check(predicate)
 
 class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Récupérer les owner_ids depuis la config du bot si ce n'est pas déjà fait par le bot lui-même
-        # Normalement, bot.owner_id ou bot.owner_ids est défini par commands.Bot
         if not bot.owner_ids:
-            from src.core import settings # Importer tardivement pour éviter les problèmes d'initialisation circulaire
-            owner_ids_config = settings.get_owner_ids()
-            if owner_ids_config:
-                bot.owner_ids = set(owner_ids_config) # Assurez-vous que c'est un set d'entiers
+            logger.warning("owner_ids non défini sur le bot lors de l'init de AdminCog. Tentative de chargement.")
+            try:
+                from src.core import settings 
+                owner_ids_config = settings.get_owner_ids()
+                if owner_ids_config:
+                    self.bot.owner_ids = set(int(oid) for oid in owner_ids_config) # Assurer que les IDs sont des entiers
+                    logger.info(f"owner_ids chargés dans AdminCog.__init__: {self.bot.owner_ids}")
+                else:
+                    logger.warning("Aucun owner_id configuré via src.core.settings pour AdminCog.__init__.")
+            except ImportError:
+                logger.error("Impossible d'importer src.core.settings dans AdminCog.__init__.")
+            except Exception as e:
+                logger.error(f"Erreur lors du chargement des owner_ids dans AdminCog.__init__: {e}", exc_info=True)
         logger.info("Cog Admin chargé.")
 
     @commands.command(name='ping', help='Vérifie la latence du bot (commande préfixée).')
@@ -88,7 +79,8 @@ class AdminCog(commands.Cog):
 
     @app_commands.command(name="admin_test", description="Commande de test admin (slash) avec rate limiting.")
     @app_commands.check(global_app_command_rate_limit_check)
-    # @app_commands.checks.is_owner() # Example: if you want owner only for this too
+    # Pour rendre cette commande propriétaire uniquement, décommentez la ligne suivante :
+    # @is_bot_owner() 
     async def admin_test_slash(self, interaction: Interaction):
         """Un simple slash command de test pour l'admin avec rate limiting."""
         latency = self.bot.latency * 1000 # en ms
@@ -96,22 +88,35 @@ class AdminCog(commands.Cog):
 
     @admin_test_slash.error
     async def on_admin_test_slash_error(self, interaction: Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.CheckFailure):
-            # The rate limit message is already sent by check_app_command_rate_limit if interaction not responded
-            # So, we might not need to send another message here if it's specifically our rate limit check.
-            # However, if the check_app_command_rate_limit failed to send (e.g. interaction already responded),
-            # or if it's another check failure, this is a fallback.
+        if not interaction.response.is_done():
+            # Si la réponse n'a pas été envoyée (par exemple, le rate limiter n'a pas répondu)
+            # Il est peu probable ici car global_app_command_rate_limit_check devrait répondre.
+            # Mais par sécurité, on s'assure de ne pas essayer de répondre deux fois.
+            pass
+
+        if isinstance(error, app_commands.NotOwner): 
+            logger.warning(f"Utilisateur non propriétaire {interaction.user.name} a tenté d'utiliser /admin_test.")
+            # Si is_bot_owner() a levé NotOwner, il n'aura pas envoyé de message.
+            if not interaction.response.is_done():
+                await interaction.response.send_message("Désolé, cette commande est réservée au propriétaire du bot.", ephemeral=True)
+            else: # Si la réponse est faite (par ex. par un defer implicite ou un autre check)
+                await interaction.followup.send("Désolé, cette commande est réservée au propriétaire du bot.", ephemeral=True)
+        elif isinstance(error, app_commands.CheckFailure):
             logger.warning(f"CheckFailure pour /admin_test par {interaction.user.name}: {error}")
+            # global_app_command_rate_limit_check envoie déjà un message si le rate limit est atteint.
+            # Donc, on ne renvoie un message que si la réponse n'est pas déjà faite.
             if not interaction.response.is_done():
                  await interaction.response.send_message("Une condition pour exécuter cette commande n'est pas remplie (ex: rate limit).", ephemeral=True)
         else:
             logger.error(f"Erreur inattendue pour /admin_test par {interaction.user.name}: {error}", exc_info=True)
             if not interaction.response.is_done():
                 await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
+            else:
+                await interaction.followup.send("Une erreur est survenue (followup).", ephemeral=True)
 
 
     @app_commands.command(name="load_cog", description="Charge une extension (cog). (Propriétaire uniquement)")
-    @is_bot_owner() # Utilisation du check personnalisé
+    @is_bot_owner() 
     @app_commands.describe(cog_name="Le nom de l'extension à charger (ex: src.cogs.admin_cog).")
     async def load_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -130,7 +135,7 @@ class AdminCog(commands.Cog):
             await interaction.followup.send(f"Erreur lors du chargement de `{cog_name}`: ```{e}```", ephemeral=True)
 
     @app_commands.command(name="unload_cog", description="Décharge une extension (cog). (Propriétaire uniquement)")
-    @is_bot_owner() # Utilisation du check personnalisé
+    @is_bot_owner() 
     @app_commands.describe(cog_name="Le nom de l'extension à décharger (ex: src.cogs.admin_cog).")
     async def unload_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -146,7 +151,7 @@ class AdminCog(commands.Cog):
             await interaction.followup.send(f"Erreur lors du déchargement de `{cog_name}`: ```{e}```", ephemeral=True)
 
     @app_commands.command(name="reload_cog", description="Recharge une extension (cog). (Propriétaire uniquement)")
-    @is_bot_owner() # Utilisation du check personnalisé
+    @is_bot_owner() 
     @app_commands.describe(cog_name="Le nom de l'extension à recharger (ex: src.cogs.admin_cog).")
     async def reload_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -174,22 +179,21 @@ class AdminCog(commands.Cog):
     @unload_cog.error
     @reload_cog.error
     async def on_cog_management_error(self, interaction: Interaction, error: app_commands.AppCommandError):
+        # S'assurer que la réponse est différée si ce n'est pas déjà fait par la commande
+        # ou par le check is_bot_owner qui lève une exception avant le defer de la commande.
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
         if isinstance(error, app_commands.NotOwner):
             logger.warning(f"Utilisateur non propriétaire {interaction.user.name} a tenté d'utiliser une commande de gestion de cog.")
             await interaction.followup.send("Désolé, cette commande est réservée au propriétaire du bot.", ephemeral=True)
-        elif isinstance(error, app_commands.CheckFailure): # Autre check failure
+        elif isinstance(error, app_commands.CheckFailure): 
             logger.warning(f"CheckFailure pour une commande de gestion de cog par {interaction.user.name}: {error}")
-            if not interaction.response.is_done(): # Check if response already sent by rate limiter
-                 await interaction.response.send_message("Une condition pour exécuter cette commande n'est pas remplie.", ephemeral=True)
-            else: # If rate limiter (or other check) already responded, followup might be needed if it was thinking
-                 await interaction.followup.send("Une condition pour exécuter cette commande n'est pas remplie (followup).", ephemeral=True)
+            await interaction.followup.send(f"Une condition pour exécuter cette commande n'est pas remplie: {error}", ephemeral=True)
         else:
             logger.error(f"Erreur inattendue pour une commande de gestion de cog par {interaction.user.name}: {error}", exc_info=True)
-            if not interaction.response.is_done():
-                await interaction.response.send_message("Une erreur est survenue lors de l'exécution de cette commande.", ephemeral=True)
-            else:
-                await interaction.followup.send("Une erreur est survenue lors de l'exécution de cette commande (followup).", ephemeral=True)
+            await interaction.followup.send("Une erreur est survenue lors de l'exécution de cette commande.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(AdminCog(bot))
+    await bot.add_cog(AdminCog(bot)) 
     logger.info("Setup du Cog Admin terminé.")
