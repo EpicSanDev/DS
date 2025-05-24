@@ -32,46 +32,45 @@ def load_config():
             config.add_section(section_name)
 
     # Surcharger avec les variables d'environnement si elles existent
-    # Discord
-    config.set('discord', 'token', os.getenv('DISCORD_TOKEN', config.get('discord', 'token', fallback=None)))
-    config.set('discord', 'prefix', os.getenv('BOT_PREFIX', config.get('discord', 'prefix', fallback='!')))
-    owner_ids_str = os.getenv('OWNER_IDS', config.get('discord', 'owner_ids', fallback=''))
-    config.set('discord', 'owner_ids', owner_ids_str)
-    config.set('discord', 'game_admin_role_id', os.getenv('GAME_ADMIN_ROLE_ID', config.get('discord', 'game_admin_role_id', fallback='')))
-    config.set('discord', 'vm_operator_role_id', os.getenv('VM_OPERATOR_ROLE_ID', config.get('discord', 'vm_operator_role_id', fallback='')))
+    # Helper pour s'assurer que les valeurs sont des strings pour config.set
+    def get_env_or_config_str(section, key, env_var, default_value=''):
+        # Priorité: variable d'environnement, puis config.ini, puis valeur par défaut
+        value = os.getenv(env_var, config.get(section, key, fallback=default_value))
+        return str(value) if value is not None else default_value
 
+    # Discord
+    config.set('discord', 'token', get_env_or_config_str('discord', 'token', 'DISCORD_TOKEN', default_value='')) # Default '' car critique
+    config.set('discord', 'prefix', get_env_or_config_str('discord', 'prefix', 'BOT_PREFIX', default_value='!'))
+    config.set('discord', 'owner_ids', get_env_or_config_str('discord', 'owner_ids', 'OWNER_IDS'))
+    config.set('discord', 'game_admin_role_id', get_env_or_config_str('discord', 'game_admin_role_id', 'GAME_ADMIN_ROLE_ID'))
+    config.set('discord', 'vm_operator_role_id', get_env_or_config_str('discord', 'vm_operator_role_id', 'VM_OPERATOR_ROLE_ID'))
 
     # GCP
-    config.set('gcp', 'project_id', os.getenv('GCP_PROJECT_ID', config.get('gcp', 'project_id', fallback=None)))
-    config.set('gcp', 'default_zone', os.getenv('GCP_DEFAULT_ZONE', config.get('gcp', 'default_zone', fallback='europe-west1-b')))
-    # Pour la clé de service, la variable d'env `GCP_SERVICE_ACCOUNT_KEY_JSON` (contenant le JSON)
-    # ou `GCP_SERVICE_ACCOUNT_FILE` (contenant le chemin vers le fichier) est souvent préférée.
-    # Le fichier config.ini peut spécifier un chemin par défaut.
-    config.set('gcp', 'service_account_file', os.getenv('GCP_SERVICE_ACCOUNT_FILE', config.get('gcp', 'service_account_file', fallback=GCP_KEY_FILE_PATH)))
+    config.set('gcp', 'project_id', get_env_or_config_str('gcp', 'project_id', 'GCP_PROJECT_ID'))
+    config.set('gcp', 'default_zone', get_env_or_config_str('gcp', 'default_zone', 'GCP_DEFAULT_ZONE', default_value='europe-west1-b'))
+    config.set('gcp', 'service_account_file', get_env_or_config_str('gcp', 'service_account_file', 'GCP_SERVICE_ACCOUNT_FILE', default_value=GCP_KEY_FILE_PATH))
 
     # Database
-    db_path_env = os.getenv('DATABASE_PATH', config.get('database', 'path', fallback=os.path.join(DATA_DIR, 'bot_database.db')))
-    config.set('database', 'path', db_path_env)
-
+    default_db_path = os.path.join(DATA_DIR, 'bot_database.db')
+    config.set('database', 'path', get_env_or_config_str('database', 'path', 'DATABASE_PATH', default_value=default_db_path))
+    # Pour 'url', si elle est définie, elle sera utilisée par get_database_url(), pas besoin de la forcer ici.
 
     # Bot Settings
-    config.set('bot_settings', 'log_level', os.getenv('LOG_LEVEL', config.get('bot_settings', 'log_level', fallback='INFO')))
-    config.set('bot_settings', 'timezone', os.getenv('TIMEZONE', config.get('bot_settings', 'timezone', fallback='UTC')))
+    config.set('bot_settings', 'log_level', get_env_or_config_str('bot_settings', 'log_level', 'LOG_LEVEL', default_value='INFO'))
+    config.set('bot_settings', 'timezone', get_env_or_config_str('bot_settings', 'timezone', 'TIMEZONE', default_value='UTC'))
 
     # Abuse Prevention Settings
-    config.add_section('abuse_prevention') # Ensure section exists for set operations
-    config.set('abuse_prevention', 'max_commands_per_minute', os.getenv('MAX_COMMANDS_PER_MINUTE', config.get('abuse_prevention', 'max_commands_per_minute', fallback='20')))
-    config.set('abuse_prevention', 'max_active_vms_per_user', os.getenv('MAX_ACTIVE_VMS_PER_USER', config.get('abuse_prevention', 'max_active_vms_per_user', fallback='2')))
-    config.set('abuse_prevention', 'max_total_vms_managed_per_user', os.getenv('MAX_TOTAL_VMS_MANAGED_PER_USER', config.get('abuse_prevention', 'max_total_vms_managed_per_user', fallback='5')))
-    config.set('abuse_prevention', 'vm_creation_cooldown_seconds', os.getenv('VM_CREATION_COOLDOWN_SECONDS', config.get('abuse_prevention', 'vm_creation_cooldown_seconds', fallback='300')))
-    config.set('abuse_prevention', 'rate_limit_excluded_commands', os.getenv('RATE_LIMIT_EXCLUDED_COMMANDS', config.get('abuse_prevention', 'rate_limit_excluded_commands', fallback='help,ping,status')))
+    config.set('abuse_prevention', 'max_commands_per_minute', get_env_or_config_str('abuse_prevention', 'max_commands_per_minute', 'MAX_COMMANDS_PER_MINUTE', default_value='20'))
+    config.set('abuse_prevention', 'max_active_vms_per_user', get_env_or_config_str('abuse_prevention', 'max_active_vms_per_user', 'MAX_ACTIVE_VMS_PER_USER', default_value='2'))
+    config.set('abuse_prevention', 'max_total_vms_managed_per_user', get_env_or_config_str('abuse_prevention', 'max_total_vms_managed_per_user', 'MAX_TOTAL_VMS_MANAGED_PER_USER', default_value='5'))
+    config.set('abuse_prevention', 'vm_creation_cooldown_seconds', get_env_or_config_str('abuse_prevention', 'vm_creation_cooldown_seconds', 'VM_CREATION_COOLDOWN_SECONDS', default_value='300'))
+    config.set('abuse_prevention', 'rate_limit_excluded_commands', get_env_or_config_str('abuse_prevention', 'rate_limit_excluded_commands', 'RATE_LIMIT_EXCLUDED_COMMANDS', default_value='help,ping,status'))
 
     # Pterodactyl Settings
-    config.add_section('pterodactyl') # Ensure section exists
-    config.set('pterodactyl', 'panel_url', os.getenv('PTERODACTYL_PANEL_URL', config.get('pterodactyl', 'panel_url', fallback=None)))
-    config.set('pterodactyl', 'api_key', os.getenv('PTERODACTYL_API_KEY', config.get('pterodactyl', 'api_key', fallback=None)))
-    config.set('pterodactyl', 'default_node_id', os.getenv('PTERODACTYL_DEFAULT_NODE_ID', config.get('pterodactyl', 'default_node_id', fallback='')))
-    config.set('pterodactyl', 'default_pterodactyl_user_id', os.getenv('PTERODACTYL_DEFAULT_USER_ID', config.get('pterodactyl', 'default_pterodactyl_user_id', fallback='')))
+    config.set('pterodactyl', 'panel_url', get_env_or_config_str('pterodactyl', 'panel_url', 'PTERODACTYL_PANEL_URL'))
+    config.set('pterodactyl', 'api_key', get_env_or_config_str('pterodactyl', 'api_key', 'PTERODACTYL_API_KEY'))
+    config.set('pterodactyl', 'default_node_id', get_env_or_config_str('pterodactyl', 'default_node_id', 'PTERODACTYL_DEFAULT_NODE_ID'))
+    config.set('pterodactyl', 'default_pterodactyl_user_id', get_env_or_config_str('pterodactyl', 'default_pterodactyl_user_id', 'PTERODACTYL_DEFAULT_USER_ID'))
 
 
     # Créer le dossier data s'il n'existe pas

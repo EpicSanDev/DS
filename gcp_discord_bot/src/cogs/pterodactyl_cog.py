@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from pteropy import PterodactylClient
+from pteropy import PteroPy # Changement ici
 import logging
 
 from src.core import settings # Pour accéder à APP_CONFIG ou aux getters
@@ -17,7 +17,7 @@ class PterodactylCog(commands.Cog, name="Pterodactyl"):
             panel_url = settings.get_pterodactyl_panel_url()
             api_key = settings.get_pterodactyl_api_key()
             if panel_url and api_key:
-                self.ptero_client = PterodactylClient(panel_url, api_key)
+                self.ptero_client = PteroPy(panel_url, api_key) # Changement ici
                 logger.info("Client Pterodactyl initialisé.")
             else:
                 logger.warning("URL du panel Pterodactyl ou clé API non configurée. Le cog Pterodactyl sera limité.")
