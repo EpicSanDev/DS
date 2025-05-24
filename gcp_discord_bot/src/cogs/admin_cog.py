@@ -58,7 +58,7 @@ class AdminCog(commands.Cog):
 
 
     @app_commands.command(name="load_cog", description="Charge une extension (cog). (Propriétaire uniquement)")
-    @app_commands.checks.is_owner()
+    @app_commands.is_owner() # Correction ici
     @app_commands.describe(cog_name="Le nom de l'extension à charger (ex: src.cogs.admin_cog).")
     async def load_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -77,7 +77,7 @@ class AdminCog(commands.Cog):
             await interaction.followup.send(f"Erreur lors du chargement de `{cog_name}`: ```{e}```", ephemeral=True)
 
     @app_commands.command(name="unload_cog", description="Décharge une extension (cog). (Propriétaire uniquement)")
-    @app_commands.checks.is_owner()
+    @app_commands.is_owner() # Correction ici
     @app_commands.describe(cog_name="Le nom de l'extension à décharger (ex: src.cogs.admin_cog).")
     async def unload_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)
@@ -93,7 +93,7 @@ class AdminCog(commands.Cog):
             await interaction.followup.send(f"Erreur lors du déchargement de `{cog_name}`: ```{e}```", ephemeral=True)
 
     @app_commands.command(name="reload_cog", description="Recharge une extension (cog). (Propriétaire uniquement)")
-    @app_commands.checks.is_owner()
+    @app_commands.is_owner() # Correction ici
     @app_commands.describe(cog_name="Le nom de l'extension à recharger (ex: src.cogs.admin_cog).")
     async def reload_cog(self, interaction: Interaction, cog_name: str):
         await interaction.response.defer(ephemeral=True)

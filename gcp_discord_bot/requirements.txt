@@ -6,4 +6,5 @@ python-dotenv
 python-dateutil
 pteropy==0.1.9
 SQLAlchemy>=1.4.0 # Ou la version que vous utilisiez
+psycopg2-binary>=2.9.0 # Pour PostgreSQL
 # Ajoutez d'autres dépendances si identifiées comme cruciales dès maintenant
