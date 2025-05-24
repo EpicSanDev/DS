@@ -9,4 +9,4 @@ COPY ./src /app/src
 COPY ./config /app/config
 # Assurez-vous que bot.py est exécutable ou ajustez les permissions si nécessaire
 # RUN chmod +x /app/src/bot.py
-CMD ["python", "src/bot.py"]
+CMD ["python", "-m", "src.bot"]
